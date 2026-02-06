@@ -17,8 +17,11 @@ Manage and consume RSS feeds directly within OpenClaw. This skill replaces tradi
 
 ### 2. Automated Updates (Cron)
 - Use the `cron` tool to schedule `agentTurn` jobs.
-- Example: "Check my 'News' category every morning at 9 AM and send a summary to Telegram."
-- The cron job should target the `rss-agent` to fetch items and format the report.
+- **Setup Pattern**: Schedule a message like: "Using the rss-agent skill, fetch the latest 3 items from all feeds in the 'AI' category, summarize the top 5 most interesting ones, and send me a report."
+- **Example**: 
+    - `schedule`: `{"kind": "cron", "expr": "0 9 * * *"}` (Every day at 9 AM)
+    - `payload`: `{"kind": "agentTurn", "message": "Check my RSS 'Blogs' category for new posts and summarize them."}`
+- The agent will use `scripts/fetch_feed.py` to retrieve data and then format a human-friendly notification.
 
 ### 3. Progressive Reading
 - **Fetch List**: Use `scripts/fetch_feed.py <url> <limit>` to get latest headlines.
