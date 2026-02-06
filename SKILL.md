@@ -7,46 +7,161 @@ description: A powerful RSS subscription manager and reader. Use it to (1) Impor
 
 Manage and consume RSS feeds directly within OpenClaw. This skill replaces traditional RSS readers by providing AI-powered summaries, progressive exploration, and automated delivery.
 
-## Core Workflows
+## Quick Start
 
-### 1. Feed Management
-- **Import OPML**: Provide an OPML file. The agent parses it using `scripts/rss_utils.py parse <path>`.
-- **Export OPML**: Convert JSON feeds to standard OPML format using `scripts/json_to_opml.py <input.json> [output.opml]`.
-- **Validation**: Check if feeds are alive using `scripts/rss_utils.py check <url>`.
-- **Storage**: Feed list is stored in `/root/.openclaw/workspace/rss_feeds.json`.
-- **Operations**: Manually add/delete/update feeds in the JSON.
+Use the unified CLI to manage your subscriptions:
 
-### 2. Automated Updates (Cron)
-- Use the `cron` tool to schedule `agentTurn` jobs.
-- **Setup Pattern**: Schedule a message like: "Using the rss-agent skill, fetch the latest 3 items from all feeds in the 'AI' category, summarize the top 5 most interesting ones, and send me a report."
-- **Example**: 
-    - `schedule`: `{"kind": "cron", "expr": "0 9 * * *"}` (Every day at 9 AM)
-    - `payload`: `{"kind": "agentTurn", "message": "Check my RSS 'Blogs' category for new posts and summarize them."}`
-- The agent will use `scripts/fetch_feed.py` to retrieve data and then format a human-friendly notification.
+```bash
+# List all feeds
+python3 skills/rss-agent/scripts/rss.py list
 
-### 3. Progressive Reading
-- **Fetch List**: Use `scripts/fetch_feed.py <url> <limit>` to get latest headlines.
-- **Preview**: Show titles and short summaries.
-- **Drill-down**: If interested, use `web_fetch` to get the full article or ask the agent to summarize specific links.
+# Add a new feed
+python3 skills/rss-agent/scripts/rss.py add https://example.com/feed.xml --category Tech
 
-## File Structure
-- `rss_feeds.json`: Current subscriptions and metadata.
-- `scripts/rss_utils.py`: OPML parsing and connectivity checks.
-- `scripts/fetch_feed.py`: Lightweight RSS/Atom fetching without external dependencies.
-- `scripts/json_to_opml.py`: Convert JSON feeds to standard OPML 2.0 format for export.
+# Fetch latest articles
+python3 skills/rss-agent/scripts/rss.py fetch "Feed Name" --limit 5
 
-## Data Schema (rss_feeds.json)
+# Check feed health
+python3 skills/rss-agent/scripts/rss.py check
+
+# Export to OPML
+python3 skills/rss-agent/scripts/rss.py export -o my_feeds.opml
+```
+
+## CLI Commands
+
+### `list` - 列出订阅
+```bash
+rss list                          # 列出所有订阅
+rss list --category 博客          # 按分类筛选
+rss list --verbose                # 显示 URL 详情
+```
+
+### `add` - 添加订阅
+```bash
+rss add <url>                     # 基础添加
+rss add <url> --name "My Blog"    # 自定义名称
+rss add <url> -c 科技 -n "博客名"  # 指定分类和名称
+```
+
+### `remove` - 删除订阅
+```bash
+rss remove "博客名称"              # 按名称删除
+rss remove https://example.com/feed.xml  # 按 URL 删除
+```
+
+### `check` - 健康检查
+```bash
+rss check                         # 检查所有订阅状态
+```
+输出示例：
+```
+✅ Feed Name 1      # 正常
+⚠️  Feed Name 2      # 返回非 RSS 内容
+❌ Feed Name 3      # 无法访问
+```
+
+### `fetch` - 获取内容
+```bash
+rss fetch "Feed Name"             # 获取最新 5 条
+rss fetch "Feed Name" -n 10       # 获取最新 10 条
+rss fetch "Feed Name" -v          # 显示文章链接
+```
+
+### `export` - 导出 OPML
+```bash
+rss export                        # 导出为 rss_export_YYYYMMDD.opml
+rss export -o backup.opml         # 指定文件名
+```
+
+### `import` - 导入 OPML
+```bash
+rss import follow.opml            # 从 OPML 导入
+```
+
+## Data Storage
+
+- **Feed list**: `/root/.openclaw/workspace/rss_feeds.json`
+- **Schema**:
 ```json
 [
   {
     "name": "Blog Name",
     "xmlUrl": "https://example.com/feed.xml",
-    "category": "Technology",
-    "lastChecked": "2026-02-06T09:00:00Z"
+    "htmlUrl": "https://example.com/",
+    "category": "Technology"
   }
 ]
 ```
 
+## Automation (Cron)
+
+Schedule periodic RSS updates using OpenClaw's cron tool:
+
+### Daily Summary Example
+```json
+{
+  "schedule": {"kind": "cron", "expr": "0 9 * * *"},
+  "payload": {
+    "kind": "agentTurn",
+    "message": "Fetch latest 3 items from all RSS feeds in category 'AI', summarize them in Chinese, and send a report"
+  },
+  "sessionTarget": "isolated"
+}
+```
+
+### Implementation Pattern
+When asked to check RSS feeds, the agent will:
+1. Run `python3 skills/rss-agent/scripts/rss.py list --category <cat>` to get feed list
+2. Run `python3 skills/rss-agent/scripts/rss.py fetch "<name>"` for each feed
+3. Use `web_fetch` to get full article content if needed
+4. Summarize and format results
+
+## Progressive Reading
+
+The skill supports a 3-level disclosure pattern:
+
+**Level 1 - Headlines**: Quick overview with `rss fetch`
+**Level 2 - Summaries**: Agent summarizes interesting articles
+**Level 3 - Full content**: Use `web_fetch` for complete article
+
+Example interaction:
+```
+User: "Check my RSS 'Tech' category"
+→ Agent lists new articles from Tech feeds
+User: "Tell me more about the AI article"
+→ Agent fetches full content and summarizes
+User: "Read the full article"
+→ Agent uses web_fetch + TTS for audio playback
+```
+
+## File Structure
+
+```
+skills/rss-agent/
+├── SKILL.md              # This file
+├── scripts/
+│   ├── rss.py           # Main CLI (unified interface)
+│   ├── fetch_feed.py    # Low-level feed fetching
+│   ├── rss_utils.py     # OPML parsing utilities
+│   └── json_to_opml.py  # Export helper (legacy, use rss.py export)
+└── references/          # Additional documentation
+```
+
+## Legacy Scripts
+
+For backward compatibility, these scripts remain available:
+
+- `fetch_feed.py <url> <limit>` - Direct feed fetching
+- `rss_utils.py parse <opml>` - OPML parsing
+- `rss_utils.py check <url>` - Single feed check
+- `json_to_opml.py <json> [opml]` - JSON to OPML conversion
+
+Prefer using the unified `rss.py` CLI for new workflows.
+
 ## Tips
-- For complex websites, use `browser` to capture content if `web_fetch` is blocked.
-- Use `tts` to listen to your daily news summary.
+
+- Use `rss check` periodically to clean up dead feeds
+- Categories help organize feeds for targeted reading
+- Combine with `tts` for audio news briefings
+- For complex websites blocked to `web_fetch`, use `browser` tool
