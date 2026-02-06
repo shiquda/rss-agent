@@ -30,54 +30,61 @@ python3 skills/rss-agent/scripts/rss.py export -o my_feeds.opml
 
 ## CLI Commands
 
-### `list` - 列出订阅
+### `list` - List subscriptions
 ```bash
-rss list                          # 列出所有订阅
-rss list --category 博客          # 按分类筛选
-rss list --verbose                # 显示 URL 详情
+rss list                          # List all subscriptions
+rss list --category Tech          # Filter by category
+rss list --verbose                # Show URLs
 ```
 
-### `add` - 添加订阅
+### `add` - Add subscription
 ```bash
-rss add <url>                     # 基础添加
-rss add <url> --name "My Blog"    # 自定义名称
-rss add <url> -c 科技 -n "博客名"  # 指定分类和名称
+rss add <url>                     # Basic add
+rss add <url> --name "My Blog"    # Custom name
+rss add <url> -c Tech -n "Blog"   # Specify category and name
 ```
 
-### `remove` - 删除订阅
+### `remove` - Remove subscription
 ```bash
-rss remove "博客名称"              # 按名称删除
-rss remove https://example.com/feed.xml  # 按 URL 删除
+rss remove "Feed Name"             # Remove by name
+rss remove https://example.com/feed.xml  # Remove by URL
 ```
 
-### `check` - 健康检查
+### `check` - Health check
 ```bash
-rss check                         # 检查所有订阅状态
+rss check                         # Check all feed status
 ```
-输出示例：
+Output example:
 ```
-✅ Feed Name 1      # 正常
-⚠️  Feed Name 2      # 返回非 RSS 内容
-❌ Feed Name 3      # 无法访问
+✅ Feed Name 1      # OK
+⚠️  Feed Name 2      # Invalid content
+❌ Feed Name 3      # Cannot access
 ```
 
-### `fetch` - 获取内容
+### `fetch` - Fetch content
 ```bash
-rss fetch "Feed Name"             # 获取最新 5 条
-rss fetch "Feed Name" -n 10       # 获取最新 10 条
-rss fetch "Feed Name" -v          # 显示文章链接
-rss fetch "Feed Name" --full-content  # 获取全文内容（部分源支持）
+rss fetch "Feed Name"             # Get latest 5 items
+rss fetch "Feed Name" -n 10       # Get latest 10 items
+rss fetch "Feed Name" -v          # Show links
+rss fetch "Feed Name" --full-content  # Get full content (if supported)
 ```
 
-### `export` - 导出 OPML
+### `digest` - Daily digest
 ```bash
-rss export                        # 导出为 rss_export_YYYYMMDD.opml
-rss export -o backup.opml         # 指定文件名
+rss digest                        # Get today's updates
+rss digest -d 2                   # Get last 2 days
+rss digest -c "AI" --limit 5      # Filter by category
 ```
 
-### `import` - 导入 OPML
+### `export` - Export to OPML
 ```bash
-rss import follow.opml            # 从 OPML 导入
+rss export                        # Export as rss_export_YYYYMMDD.opml
+rss export -o backup.opml         # Specify filename
+```
+
+### `import` - Import from OPML
+```bash
+rss import follow.opml            # Import from OPML
 ```
 
 ## Data Storage
@@ -105,7 +112,7 @@ Schedule periodic RSS updates using OpenClaw's cron tool:
   "schedule": {"kind": "cron", "expr": "0 9 * * *"},
   "payload": {
     "kind": "agentTurn",
-    "message": "Fetch latest 3 items from all RSS feeds in category 'AI', summarize them in Chinese, and send a report"
+    "message": "Fetch latest 3 items from all RSS feeds in category 'AI', summarize them, and send a report"
   },
   "sessionTarget": "isolated"
 }
@@ -163,28 +170,14 @@ User: "Read the full article"
 ```
 skills/rss-agent/
 ├── SKILL.md              # This file
-├── scripts/
-│   ├── rss.py           # Main CLI (unified interface)
-│   ├── fetch_feed.py    # Low-level feed fetching
-│   ├── rss_utils.py     # OPML parsing utilities
-│   └── json_to_opml.py  # Export helper (legacy, use rss.py export)
-└── references/          # Additional documentation
+└── scripts/
+    └── rss.py           # Main CLI (unified interface)
 ```
-
-## Legacy Scripts
-
-For backward compatibility, these scripts remain available:
-
-- `fetch_feed.py <url> <limit>` - Direct feed fetching
-- `rss_utils.py parse <opml>` - OPML parsing
-- `rss_utils.py check <url>` - Single feed check
-- `json_to_opml.py <json> [opml]` - JSON to OPML conversion
-
-Prefer using the unified `rss.py` CLI for new workflows.
 
 ## Tips
 
 - Use `rss check` periodically to clean up dead feeds
+- Use `rss digest` for quick daily updates overview
 - Categories help organize feeds for targeted reading
 - Combine with `tts` for audio news briefings
 - For complex websites blocked to `web_fetch`, use `browser` tool
