@@ -10,7 +10,8 @@ Manage and consume RSS feeds directly within OpenClaw. This skill replaces tradi
 ## Core Workflows
 
 ### 1. Feed Management
-- **Import**: Provide an OPML file. The agent parses it using `scripts/rss_utils.py parse <path>`.
+- **Import OPML**: Provide an OPML file. The agent parses it using `scripts/rss_utils.py parse <path>`.
+- **Export OPML**: Convert JSON feeds to standard OPML format using `scripts/json_to_opml.py <input.json> [output.opml]`.
 - **Validation**: Check if feeds are alive using `scripts/rss_utils.py check <url>`.
 - **Storage**: Feed list is stored in `/root/.openclaw/workspace/rss_feeds.json`.
 - **Operations**: Manually add/delete/update feeds in the JSON.
@@ -32,6 +33,7 @@ Manage and consume RSS feeds directly within OpenClaw. This skill replaces tradi
 - `rss_feeds.json`: Current subscriptions and metadata.
 - `scripts/rss_utils.py`: OPML parsing and connectivity checks.
 - `scripts/fetch_feed.py`: Lightweight RSS/Atom fetching without external dependencies.
+- `scripts/json_to_opml.py`: Convert JSON feeds to standard OPML 2.0 format for export.
 
 ## Data Schema (rss_feeds.json)
 ```json
