@@ -66,6 +66,7 @@ rss check                         # 检查所有订阅状态
 rss fetch "Feed Name"             # 获取最新 5 条
 rss fetch "Feed Name" -n 10       # 获取最新 10 条
 rss fetch "Feed Name" -v          # 显示文章链接
+rss fetch "Feed Name" --full-content  # 获取全文内容（部分源支持）
 ```
 
 ### `export` - 导出 OPML
@@ -117,22 +118,44 @@ When asked to check RSS feeds, the agent will:
 3. Use `web_fetch` to get full article content if needed
 4. Summarize and format results
 
+## Full Content Extraction
+
+Some RSS feeds provide full article content via `content:encoded` (RSS 2.0) or `content` (Atom) fields. Use the `--full-content` flag to extract and read articles directly:
+
+```bash
+# Read full article without opening browser
+rss fetch "Feed Name" --limit 1 --full-content
+
+# Check which feeds in your collection support full content
+rss list --verbose
+```
+
+**How it works:**
+- RSS 2.0 feeds with `content:encoded` field → ✅ Full content available
+- Atom feeds with `content` field → ✅ Full content available
+- Feeds with only `description`/`summary` → ❌ Only summary available
+
+**Notes:**
+- Full content extraction strips HTML tags for readability
+- If a feed doesn't provide full content, the CLI will show a warning
+- For feeds without full content, use `web_fetch` or `browser` tools as fallback
+
 ## Progressive Reading
 
 The skill supports a 3-level disclosure pattern:
 
 **Level 1 - Headlines**: Quick overview with `rss fetch`
 **Level 2 - Summaries**: Agent summarizes interesting articles
-**Level 3 - Full content**: Use `web_fetch` for complete article
+**Level 3 - Full content**: Use `rss fetch --full-content` or `web_fetch` for complete article
 
 Example interaction:
 ```
 User: "Check my RSS 'Tech' category"
 → Agent lists new articles from Tech feeds
 User: "Tell me more about the AI article"
-→ Agent fetches full content and summarizes
+→ Agent fetches full content using rss fetch --full-content and summarizes
 User: "Read the full article"
-→ Agent uses web_fetch + TTS for audio playback
+→ Agent displays the full content or uses TTS for audio playback
 ```
 
 ## File Structure
@@ -165,3 +188,4 @@ Prefer using the unified `rss.py` CLI for new workflows.
 - Categories help organize feeds for targeted reading
 - Combine with `tts` for audio news briefings
 - For complex websites blocked to `web_fetch`, use `browser` tool
+- Try `rss fetch --full-content` first before using `web_fetch` - it's faster for supported feeds
