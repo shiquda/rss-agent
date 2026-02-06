@@ -379,10 +379,11 @@ def cmd_import(args):
         print(f"❌ Import failed: {e}")
 
 def cmd_digest(args):
-    """Get daily digest of updates"""
+    """Get daily digest of updates (concurrent fetch)"""
     import requests
     import xml.etree.ElementTree as ET
     from datetime import datetime, timedelta
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     
     feeds = load_feeds()
     
@@ -404,24 +405,26 @@ def cmd_digest(args):
     
     print(f"📅 Updates: {since.strftime('%Y-%m-%d %H:%M')} → {now.strftime('%Y-%m-%d %H:%M')}\n")
     
-    all_updates = []
-    
     if args.max_feeds > 0:
         feeds = feeds[:args.max_feeds]
     
-    for feed in feeds:
+    all_updates = []
+    processed = 0
+    
+    def fetch_feed_updates(feed):
+        """Fetch updates from a single feed"""
         name = feed.get('name', 'Unknown')
         url = feed.get('xmlUrl', '')
-        category = feed.get('category', 'Uncategorized')
+        category = feed.get('category') or 'Uncategorized'
+        items = []
         
         try:
             resp = requests.get(url, timeout=10, 
                               headers={'User-Agent': 'OpenClaw-RSS-Agent/1.0'})
             if resp.status_code != 200:
-                continue
+                return []
             
             root = ET.fromstring(resp.content)
-            items = []
             
             content_ns = '{http://purl.org/rss/1.0/modules/content/}'
             atom_ns = '{http://www.w3.org/2005/Atom}'
@@ -471,25 +474,39 @@ def cmd_digest(args):
                         except:
                             pass
             
-            all_updates.extend(items)
+            return items
             
         except Exception as e:
-            pass
+            return []
+    
+    # Concurrent fetch using ThreadPoolExecutor
+    max_workers = min(20, len(feeds))  # Max 20 concurrent threads
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_feed = {executor.submit(fetch_feed_updates, feed): feed for feed in feeds}
+        
+        for future in as_completed(future_to_feed):
+            feed = future_to_feed[future]
+            processed += 1
+            try:
+                items = future.result()
+                all_updates.extend(items)
+            except Exception as e:
+                pass
     
     all_updates.sort(key=lambda x: x['date'], reverse=True)
     
     if not all_updates:
-        print("📭 No new content in this period")
+        print(f"📭 No new content in this period (checked {processed} feeds)")
         return
     
     by_category = {}
     for item in all_updates:
-        cat = item['category']
+        cat = item['category'] or 'Uncategorized'
         if cat not in by_category:
             by_category[cat] = []
         by_category[cat].append(item)
     
-    print(f"📊 {len(all_updates)} new items\n")
+    print(f"📊 {len(all_updates)} new items from {processed} feeds\n")
     print("="*60)
     
     for category in sorted(by_category.keys()):
