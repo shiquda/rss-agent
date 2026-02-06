@@ -160,6 +160,7 @@ def cmd_fetch(args):
     """获取订阅内容"""
     import requests
     import xml.etree.ElementTree as ET
+    import html
     
     feeds = load_feeds()
     
@@ -177,8 +178,9 @@ def cmd_fetch(args):
     url = target_feed.get('xmlUrl')
     name = target_feed.get('name')
     limit = args.limit
+    full_content = args.full_content
     
-    print(f"📡 正在获取: {name}\n")
+    print(f"📡 正在获取: {name}{' (全文模式)' if full_content else ''}\n")
     
     try:
         resp = requests.get(url, timeout=15, 
@@ -190,6 +192,10 @@ def cmd_fetch(args):
         root = ET.fromstring(resp.content)
         items = []
         
+        # Namespaces
+        content_ns = '{http://purl.org/rss/1.0/modules/content/}'
+        atom_ns = '{http://www.w3.org/2005/Atom}'
+        
         # RSS 2.0
         channel = root.find('channel')
         if channel is not None:
@@ -197,24 +203,68 @@ def cmd_fetch(args):
                 title = item.findtext('title', 'No Title')
                 link = item.findtext('link', '')
                 pub_date = item.findtext('pubDate', '')
-                items.append({"title": title, "link": link, "date": pub_date})
+                desc = item.findtext('description', '')
+                
+                content = None
+                if full_content:
+                    content_elem = item.find(f'{content_ns}encoded')
+                    if content_elem is not None and content_elem.text:
+                        content = html.unescape(content_elem.text)
+                
+                items.append({
+                    "title": title, 
+                    "link": link, 
+                    "date": pub_date,
+                    "summary": desc[:300] + "..." if len(desc) > 300 else desc,
+                    "content": content
+                })
         else:
             # Atom
-            entries = root.findall('{http://www.w3.org/2005/Atom}entry')
+            entries = root.findall(f'{atom_ns}entry')
             for entry in entries[:limit]:
-                title = entry.findtext('{http://www.w3.org/2005/Atom}title', 'No Title')
-                link_node = entry.find('{http://www.w3.org/2005/Atom}link')
+                title = entry.findtext(f'{atom_ns}title', 'No Title')
+                link_node = entry.find(f'{atom_ns}link')
                 link = link_node.get('href') if link_node is not None else ''
-                pub_date = entry.findtext('{http://www.w3.org/2005/Atom}updated', '')
-                items.append({"title": title, "link": link, "date": pub_date})
+                pub_date = entry.findtext(f'{atom_ns}updated', '')
+                summary = entry.findtext(f'{atom_ns}summary', '')
+                
+                content = None
+                if full_content:
+                    content_elem = entry.find(f'{atom_ns}content')
+                    if content_elem is not None and content_elem.text:
+                        content = html.unescape(content_elem.text)
+                
+                items.append({
+                    "title": title, 
+                    "link": link, 
+                    "date": pub_date,
+                    "summary": summary[:300] + "..." if len(summary) > 300 else summary,
+                    "content": content
+                })
         
         print(f"📰 最新 {len(items)} 条内容:\n")
         for i, item in enumerate(items, 1):
+            print(f"{'='*50}")
             print(f"{i}. {item['title']}")
             if item['date']:
                 print(f"   时间: {item['date']}")
             if args.verbose and item['link']:
                 print(f"   链接: {item['link']}")
+            
+            if full_content and item['content']:
+                # Strip HTML tags for readability
+                content = item['content']
+                content = content.replace('<p>', '\n').replace('</p>', '')
+                content = content.replace('<br>', '\n').replace('<br/>', '\n')
+                # Simple HTML tag removal
+                import re
+                content = re.sub('<[^<]+?>', '', content)
+                content = html.unescape(content)
+                print(f"\n📄 全文内容:\n{content[:2000]}..." if len(content) > 2000 else f"\n📄 全文内容:\n{content}")
+            elif not full_content:
+                print(f"\n📝 摘要: {item['summary']}")
+            else:
+                print(f"\n⚠️ 该源未提供全文内容")
             print()
             
     except Exception as e:
@@ -384,6 +434,7 @@ def main():
     fetch_parser.add_argument('identifier', help='订阅名称或 URL')
     fetch_parser.add_argument('-n', '--limit', type=int, default=5, help='获取数量 (默认5)')
     fetch_parser.add_argument('-v', '--verbose', action='store_true', help='显示链接')
+    fetch_parser.add_argument('--full-content', action='store_true', help='尝试获取全文内容 (仅部分源支持)')
     
     # export 命令
     export_parser = subparsers.add_parser('export', help='导出 OPML')
