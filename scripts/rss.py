@@ -390,6 +390,150 @@ def cmd_import(args):
     except Exception as e:
         print(f"❌ 导入失败: {e}")
 
+def cmd_digest(args):
+    """获取今日/昨日更新的摘要"""
+    import requests
+    import xml.etree.ElementTree as ET
+    from datetime import datetime, timedelta
+    import re
+    
+    feeds = load_feeds()
+    
+    if not feeds:
+        print("📭 暂无订阅")
+        return
+    
+    # 按分类筛选
+    if args.category:
+        feeds = [f for f in feeds if f.get('category') == args.category]
+        if not feeds:
+            print(f"📭 分类 '{args.category}' 下暂无订阅")
+            return
+    
+    # 计算时间范围
+    now = datetime.now()
+    if args.days:
+        since = now - timedelta(days=args.days)
+    else:
+        # 默认从今天 00:00 开始
+        since = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    print(f"📅 获取更新: {since.strftime('%Y-%m-%d %H:%M')} → {now.strftime('%Y-%m-%d %H:%M')}\n")
+    
+    all_updates = []
+    
+    # 限制检查数量
+    if args.max_feeds > 0:
+        feeds = feeds[:args.max_feeds]
+    
+    for feed in feeds:
+        name = feed.get('name', 'Unknown')
+        url = feed.get('xmlUrl', '')
+        category = feed.get('category', '未分类')
+        
+        try:
+            resp = requests.get(url, timeout=10, 
+                              headers={'User-Agent': 'OpenClaw-RSS-Agent/1.0'})
+            if resp.status_code != 200:
+                continue
+            
+            root = ET.fromstring(resp.content)
+            items = []
+            
+            content_ns = '{http://purl.org/rss/1.0/modules/content/}'
+            atom_ns = '{http://www.w3.org/2005/Atom}'
+            
+            # RSS 2.0
+            channel = root.find('channel')
+            if channel is not None:
+                for item in channel.findall('item'):
+                    title = item.findtext('title', 'No Title')
+                    link = item.findtext('link', '')
+                    pub_date = item.findtext('pubDate', '')
+                    
+                    if pub_date:
+                        try:
+                            # 尝试解析 RSS 日期格式
+                            from email.utils import parsedate_to_datetime
+                            from datetime import timezone
+                            item_date = parsedate_to_datetime(pub_date)
+                            # 转换为无时区时间进行比较
+                            if item_date.tzinfo:
+                                item_date = item_date.replace(tzinfo=None)
+                            if item_date >= since:
+                                items.append({
+                                    'title': title,
+                                    'link': link,
+                                    'date': item_date,
+                                    'feed_name': name,
+                                    'category': category
+                                })
+                        except:
+                            pass
+            else:
+                # Atom
+                entries = root.findall(f'{atom_ns}entry')
+                for entry in entries:
+                    title = entry.findtext(f'{atom_ns}title', 'No Title')
+                    link_node = entry.find(f'{atom_ns}link')
+                    link = link_node.get('href') if link_node is not None else ''
+                    pub_date = entry.findtext(f'{atom_ns}updated', '')
+                    
+                    if pub_date:
+                        try:
+                            item_date = datetime.fromisoformat(pub_date.replace('Z', '+00:00').replace('+00:00', ''))
+                            if item_date >= since:
+                                items.append({
+                                    'title': title,
+                                    'link': link,
+                                    'date': item_date,
+                                    'feed_name': name,
+                                    'category': category
+                                })
+                        except:
+                            pass
+            
+            all_updates.extend(items)
+            
+        except Exception as e:
+            pass  # 静默跳过失败的源
+    
+    # 按时间排序
+    all_updates.sort(key=lambda x: x['date'], reverse=True)
+    
+    if not all_updates:
+        print("📭 该时间段内无新内容")
+        return
+    
+    # 按分类分组显示
+    by_category = {}
+    for item in all_updates:
+        cat = item['category']
+        if cat not in by_category:
+            by_category[cat] = []
+        by_category[cat].append(item)
+    
+    print(f"📊 共 {len(all_updates)} 条新内容\n")
+    print("="*60)
+    
+    for category in sorted(by_category.keys()):
+        items = by_category[category]
+        print(f"\n【{category}】({len(items)}条)")
+        print("-"*40)
+        
+        for item in items[:args.limit]:
+            time_str = item['date'].strftime('%m-%d %H:%M')
+            print(f"  • [{time_str}] {item['title'][:50]}{'...' if len(item['title']) > 50 else ''}")
+            print(f"    来源: {item['feed_name']}")
+            if args.verbose and item['link']:
+                print(f"    链接: {item['link']}")
+        
+        if len(items) > args.limit:
+            print(f"    ... 还有 {len(items) - args.limit} 条")
+    
+    print(f"\n{'='*60}")
+    print(f"🕐 更新时间: {now.strftime('%Y-%m-%d %H:%M')}")
+
 def main():
     parser = argparse.ArgumentParser(
         prog='rss',
@@ -402,7 +546,9 @@ def main():
   rss add https://example.com/feed.xml --category 科技
   rss remove "某个订阅名称"
   rss check                     # 检查所有订阅状态
-  rss fetch "DIYgod" --limit 3  # 获取某订阅最新3条
+  rss fetch "Feed Name" --limit 3      # 获取某订阅最新3条
+  rss digest                    # 获取今日所有更新
+  rss digest -d 2               # 获取最近2天的更新
   rss export                    # 导出为 OPML
   rss import follow.opml        # 从 OPML 导入
         '''
@@ -444,6 +590,14 @@ def main():
     import_parser = subparsers.add_parser('import', help='导入 OPML')
     import_parser.add_argument('file', help='OPML 文件路径')
     
+    # digest 命令 - 获取今日更新摘要
+    digest_parser = subparsers.add_parser('digest', help='获取今日/昨日更新的摘要')
+    digest_parser.add_argument('-d', '--days', type=int, help='获取最近 N 天的内容')
+    digest_parser.add_argument('-n', '--limit', type=int, default=3, help='每分类显示数量 (默认3)')
+    digest_parser.add_argument('-c', '--category', help='仅获取指定分类')
+    digest_parser.add_argument('-v', '--verbose', action='store_true', help='显示链接')
+    digest_parser.add_argument('--max-feeds', type=int, default=0, help='最多检查N个订阅源(0=全部)')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -459,6 +613,7 @@ def main():
         'fetch': cmd_fetch,
         'export': cmd_export,
         'import': cmd_import,
+        'digest': cmd_digest,
     }
     
     commands[args.command](args)
