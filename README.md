@@ -1,3 +1,5 @@
+> ⚠️ 本项目已停止维护并归档，欢迎 fork。This project is no longer maintained.
+
 # rss-agent
 
 A powerful RSS subscription manager and reader for OpenClaw. This skill replaces traditional RSS readers by providing AI-powered summaries, progressive exploration, and automated delivery.
